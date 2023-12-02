@@ -344,6 +344,7 @@ void Workspaces::on_workspace_renamed(std::string const &payload) {
 
 void Workspaces::on_monitor_focused(std::string const &payload) {
   active_workspace_name_ = payload.substr(payload.find(',') + 1);
+  active_monitor_name_ = payload.substr(0, payload.find(','));
 }
 
 void Workspaces::on_window_opened(std::string const &payload) {
@@ -608,6 +609,7 @@ void Workspaces::create_persistent_workspaces() {
 
 void Workspaces::init() {
   active_workspace_name_ = (gIPC->getSocket1JsonReply("activeworkspace"))["name"].asString();
+  active_monitor_name_ = bar_.output->name;
 
   // get monitor ID from name (used by persistent workspaces)
   monitor_id_ = 0;
@@ -690,16 +692,17 @@ void add_or_remove_class(const Glib::RefPtr<Gtk::StyleContext> &context, bool co
 
 void Workspace::update(const std::string &format, const std::string &icon) {
   // clang-format off
-  if (this->workspace_manager_.active_only() && \
+  if ((this->workspace_manager_.active_only() && \
      !this->active() && \
      !this->is_persistent() && \
      !this->is_visible() && \
-     !this->is_special()) {
+     !this->is_special()) || workspace_manager_.get_active_monitor() != output_) {
     // clang-format on
     // if active_only is true, hide if not active, persistent, visible or special
     button_.hide();
     return;
   }
+
   button_.show();
 
   auto style_context = button_.get_style_context();
@@ -723,8 +726,12 @@ void Workspace::update(const std::string &format, const std::string &icon) {
     windows.append(window_repr);
   }
 
+  std::string workspace_name = name();
+  if (workspace_name.size() > 1) {
+    workspace_name = workspace_name[1];
+  }
   label_.set_markup(fmt::format(fmt::runtime(format), fmt::arg("id", id()),
-                                fmt::arg("name", name()), fmt::arg("icon", icon),
+                                fmt::arg("name", workspace_name), fmt::arg("icon", icon),
                                 fmt::arg("windows", windows)));
 }
 

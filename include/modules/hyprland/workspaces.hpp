@@ -120,8 +120,9 @@ class Workspaces : public AModule, public EventHandler {
   void init();
 
   auto all_outputs() const -> bool { return all_outputs_; }
-  auto show_special() const -> bool { return show_special_; }
+  auto show_special() const -> bool { return show_special_ }
   auto active_only() const -> bool { return active_only_; }
+  auto get_active_monitor() const -> std::string { return active_monitor_name_; }
 
   auto get_bar_output() const -> std::string { return bar_.output->name; }
 
@@ -188,6 +189,7 @@ class Workspaces : public AModule, public EventHandler {
   bool with_icon_;
   uint64_t monitor_id_;
   std::string active_workspace_name_;
+  std::string active_monitor_name_;
   std::vector<std::unique_ptr<Workspace>> workspaces_;
   std::vector<Json::Value> workspaces_to_create_;
   std::vector<std::string> workspaces_to_remove_;
