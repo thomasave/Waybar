@@ -120,7 +120,7 @@ class Workspaces : public AModule, public EventHandler {
   void init();
 
   auto all_outputs() const -> bool { return all_outputs_; }
-  auto show_special() const -> bool { return show_special_ }
+  auto show_special() const -> bool { return show_special_; }
   auto active_only() const -> bool { return active_only_; }
   auto get_active_monitor() const -> std::string { return active_monitor_name_; }
 

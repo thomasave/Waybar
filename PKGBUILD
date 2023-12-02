@@ -1,5 +1,5 @@
 pkgname=waybar-git
-pkgver=r2429.09142fa3
+pkgver=r3047.d277a972
 pkgrel=1
 pkgdesc='Highly customizable Wayland bar for Sway and Wlroots based compositors (GIT)'
 arch=('x86_64')
