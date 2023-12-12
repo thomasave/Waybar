@@ -836,9 +836,11 @@ void Taskbar::update() {
   std::set<std::string> visible_workspaces;
   std::vector<bool> visible_clients;
   for (Json::Value &monitor : monitors) {
-    auto ws = monitor["activeWorkspace"];
-    if (ws.isObject() && (ws["name"].isString())) {
-      visible_workspaces.insert(ws["name"].asString());
+    if (monitor["focused"].asBool()) {
+      auto ws = monitor["activeWorkspace"];
+      if (ws.isObject() && (ws["name"].isString())) {
+        visible_workspaces.insert(ws["name"].asString());
+      }
     }
   }
   auto tasks = gIPC->getSocket1JsonReply("clients");
