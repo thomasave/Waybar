@@ -1,4 +1,5 @@
 #include "modules/wlr/taskbar.hpp"
+#include "modules/hyprland/backend.hpp"
 
 #include <fmt/core.h>
 #include <gdkmm/monitor.h>
@@ -12,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <set>
 #include <sstream>
 #include <utility>
 
@@ -25,6 +27,8 @@
 #include "util/gtk_icon.hpp"
 
 namespace waybar::modules::wlr {
+
+using namespace hyprland;
 
 /* Icon loading functions */
 static std::vector<std::string> search_prefix() {
@@ -269,6 +273,10 @@ static const struct zwlr_foreign_toplevel_handle_v1_listener toplevel_handle_imp
 static const std::vector<Gtk::TargetEntry> target_entries = {
     Gtk::TargetEntry("WAYBAR_TOPLEVEL", Gtk::TARGET_SAME_APP, 0)};
 
+uint32_t Task::getId() const {
+  return id_;
+}
+
 Task::Task(const waybar::Bar &bar, const Json::Value &config, Taskbar *tbar,
            struct zwlr_foreign_toplevel_handle_v1 *tl_handle, struct wl_seat *seat)
     : bar_{bar},
@@ -390,7 +398,7 @@ void Task::handle_title(const char *title) {
 }
 
 void Task::hide_if_ignored() {
-  if (tbar_->ignore_list().count(app_id_) || tbar_->ignore_list().count(title_)) {
+  if (tbar_->ignore_list().count(app_id_) || tbar_->ignore_list().count(title_) || tbar_->getHiddenList().contains(id_)) {
     ignored_ = true;
     if (button_visible_) {
       auto output = gdk_wayland_monitor_get_wl_output(bar_.output->monitor->gobj());
@@ -629,6 +637,7 @@ bool Task::operator==(const Task &o) const { return o.id_ == id_; }
 bool Task::operator!=(const Task &o) const { return o.id_ != id_; }
 
 void Task::update() {
+  hide_if_ignored();
   bool markup = config_["markup"].isBool() ? config_["markup"].asBool() : false;
   std::string title = title_;
   std::string name = name_;
@@ -727,6 +736,10 @@ static void handle_global_remove(void *data, struct wl_registry *registry, uint3
 static const wl_registry_listener registry_listener_impl = {.global = handle_global,
                                                             .global_remove = handle_global_remove};
 
+std::set<uint32_t>& Taskbar::getHiddenList() {
+  return hidden_list_;
+}
+
 Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Value &config)
     : waybar::AModule(config, "taskbar", id, false, false),
       bar_(bar),
@@ -793,6 +806,10 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   }
 
   icon_themes_.push_back(Gtk::IconTheme::get_default());
+
+  if (!gIPC) {
+    gIPC = std::make_unique<IPC>();
+  }
 }
 
 Taskbar::~Taskbar() {
@@ -815,8 +832,32 @@ Taskbar::~Taskbar() {
 }
 
 void Taskbar::update() {
+  auto monitors = gIPC->getSocket1JsonReply("monitors");
+  std::set<std::string> visible_workspaces;
+  std::vector<bool> visible_clients;
+  for (Json::Value &monitor : monitors) {
+    auto ws = monitor["activeWorkspace"];
+    if (ws.isObject() && (ws["name"].isString())) {
+      visible_workspaces.insert(ws["name"].asString());
+    }
+  }
+  auto tasks = gIPC->getSocket1JsonReply("clients");
+  for (Json::Value &task: tasks) {
+    auto ws = task["workspace"]["id"].asString();
+    visible_clients.push_back(visible_workspaces.contains(ws));
+  }
+
+  unsigned int i = 0;
   for (auto &t : tasks_) {
+    if (visible_clients[i]) {
+      if(hidden_list_.contains(t->getId())) {
+        hidden_list_.erase(t->getId());
+      }
+    } else {
+      hidden_list_.insert(t->getId());
+    }
     t->update();
+    i++;
   }
 
   if (config_["sort-by-app-id"].asBool()) {
