@@ -62,6 +62,7 @@ class Workspace {
  public:
   explicit Workspace(const Json::Value& workspace_data, Workspaces& workspace_manager,
                      const Json::Value& clients_data = Json::Value::nullRef);
+
   std::string& select_icon(std::map<std::string, std::string>& icons_map);
   Gtk::Button& button() { return button_; };
 

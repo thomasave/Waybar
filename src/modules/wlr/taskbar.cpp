@@ -810,6 +810,13 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   if (!gIPC) {
     gIPC = std::make_unique<IPC>();
   }
+  gIPC->registerForIPC("focusedmon", this);
+  gIPC->registerForIPC("activewindow", this);
+  gIPC->registerForIPC("movewindow", this);
+}
+
+void Taskbar::onEvent(const std::string & /*ev*/) {
+  update();
 }
 
 Taskbar::~Taskbar() {
@@ -832,6 +839,7 @@ Taskbar::~Taskbar() {
 }
 
 void Taskbar::update() {
+  std::cout << "Update" << std::endl;
   auto monitors = gIPC->getSocket1JsonReply("monitors");
   std::set<std::string> visible_workspaces;
   std::vector<bool> visible_clients;

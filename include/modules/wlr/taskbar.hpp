@@ -20,6 +20,7 @@
 #include "bar.hpp"
 #include "client.hpp"
 #include "giomm/desktopappinfo.h"
+#include "modules/hyprland/backend.hpp"
 #include "util/json.hpp"
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
 
@@ -137,7 +138,7 @@ class Task {
 
 using TaskPtr = std::unique_ptr<Task>;
 
-class Taskbar : public waybar::AModule {
+class Taskbar : public waybar::AModule, public hyprland::EventHandler {
  public:
   Taskbar(const std::string &, const waybar::Bar &, const Json::Value &);
   ~Taskbar();
@@ -155,6 +156,7 @@ class Taskbar : public waybar::AModule {
 
   struct zwlr_foreign_toplevel_manager_v1 *manager_;
   struct wl_seat *seat_;
+  void onEvent(const std::string& e) override;
 
  public:
   /* Callbacks for global registration */
