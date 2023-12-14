@@ -397,7 +397,6 @@ void Task::handle_title(const char *title) {
 }
 
 void Task::setHidden(bool value) {
-  std::cout << "SetHidden: (" << value << ") " << title_ << std::endl;
   if (!hidden_ && value) {
       tbar_->remove_button(button);
   } else if (hidden_ && !value) {
@@ -811,16 +810,7 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
 
   icon_themes_.push_back(Gtk::IconTheme::get_default());
 
-  if (!gIPC) {
-    gIPC = std::make_unique<IPC>();
-  }
-  gIPC->registerForIPC("focusedmon", this);
-  gIPC->registerForIPC("activewindow", this);
-  gIPC->registerForIPC("movewindow", this);
-}
-
-void Taskbar::onEvent(const std::string & /*ev*/) {
-  update();
+  ipc = std::make_unique<IPC>();
 }
 
 Taskbar::~Taskbar() {
@@ -843,7 +833,7 @@ Taskbar::~Taskbar() {
 }
 
 void Taskbar::update() {
-  auto monitors = gIPC->getSocket1JsonReply("monitors");
+  auto monitors = ipc->getSocket1JsonReply("monitors");
   std::set<std::string> visible_workspaces;
   std::vector<bool> visible_clients;
   for (Json::Value &monitor : monitors) {
@@ -854,15 +844,10 @@ void Taskbar::update() {
       }
     }
   }
-  auto tasks = gIPC->getSocket1JsonReply("clients");
+  auto tasks = ipc->getSocket1JsonReply("clients");
   for (Json::Value &task: tasks) {
     if (task["pid"].asInt() > -1) {
       auto ws = task["workspace"]["id"].asString();
-      if (visible_workspaces.contains(ws)) {
-        std::cout << "Found visible client: " << task["title"] << std::endl;
-      } else {
-        std::cout << "Found invisible client: " << task["title"] << std::endl;
-      }
       visible_clients.push_back(visible_workspaces.contains(ws));
     }
   }
