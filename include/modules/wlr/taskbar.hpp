@@ -34,6 +34,7 @@ class Task {
        struct zwlr_foreign_toplevel_handle_v1 *, struct wl_seat *);
   ~Task();
   uint32_t getId() const;
+  void setHidden(bool value);
 
  public:
   enum State {
@@ -65,6 +66,7 @@ class Task {
   Glib::RefPtr<Gio::DesktopAppInfo> app_info_;
   bool button_visible_ = false;
   bool ignored_ = false;
+  bool hidden_ = false;
 
   bool with_icon_ = false;
   bool with_name_ = false;
@@ -151,7 +153,6 @@ class Taskbar : public waybar::AModule, public hyprland::EventHandler {
 
   std::vector<Glib::RefPtr<Gtk::IconTheme>> icon_themes_;
   std::unordered_set<std::string> ignore_list_;
-  std::set<uint32_t> hidden_list_;
   std::map<std::string, std::string> app_ids_replace_map_;
 
   struct zwlr_foreign_toplevel_manager_v1 *manager_;
@@ -162,7 +163,6 @@ class Taskbar : public waybar::AModule, public hyprland::EventHandler {
   /* Callbacks for global registration */
   void register_manager(struct wl_registry *, uint32_t name, uint32_t version);
   void register_seat(struct wl_registry *, uint32_t name, uint32_t version);
-  std::set<uint32_t>& getHiddenList();
 
   /* Callbacks for the wlr protocol */
   void handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *);

@@ -372,7 +372,6 @@ std::string Task::repr() const {
   std::stringstream ss;
   ss << "Task (" << id_ << ") " << title_ << " [" << app_id_ << "] <" << (active() ? "A" : "a")
      << (maximized() ? "M" : "m") << (minimized() ? "I" : "i") << (fullscreen() ? "F" : "f") << ">";
-
   return ss.str();
 }
 
@@ -397,8 +396,18 @@ void Task::handle_title(const char *title) {
   hide_if_ignored();
 }
 
+void Task::setHidden(bool value) {
+  std::cout << "SetHidden: (" << value << ") " << title_ << std::endl;
+  if (!hidden_ && value) {
+      tbar_->remove_button(button);
+  } else if (hidden_ && !value) {
+      tbar_->add_button(button);
+  }
+  hidden_ = value;
+}
+
 void Task::hide_if_ignored() {
-  if (tbar_->ignore_list().count(app_id_) || tbar_->ignore_list().count(title_) || tbar_->getHiddenList().contains(id_)) {
+  if (tbar_->ignore_list().count(app_id_) || tbar_->ignore_list().count(title_)) {
     ignored_ = true;
     if (button_visible_) {
       auto output = gdk_wayland_monitor_get_wl_output(bar_.output->monitor->gobj());
@@ -637,7 +646,6 @@ bool Task::operator==(const Task &o) const { return o.id_ == id_; }
 bool Task::operator!=(const Task &o) const { return o.id_ != id_; }
 
 void Task::update() {
-  hide_if_ignored();
   bool markup = config_["markup"].isBool() ? config_["markup"].asBool() : false;
   std::string title = title_;
   std::string name = name_;
@@ -735,10 +743,6 @@ static void handle_global_remove(void *data, struct wl_registry *registry, uint3
 
 static const wl_registry_listener registry_listener_impl = {.global = handle_global,
                                                             .global_remove = handle_global_remove};
-
-std::set<uint32_t>& Taskbar::getHiddenList() {
-  return hidden_list_;
-}
 
 Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Value &config)
     : waybar::AModule(config, "taskbar", id, false, false),
@@ -839,7 +843,6 @@ Taskbar::~Taskbar() {
 }
 
 void Taskbar::update() {
-  std::cout << "Update" << std::endl;
   auto monitors = gIPC->getSocket1JsonReply("monitors");
   std::set<std::string> visible_workspaces;
   std::vector<bool> visible_clients;
@@ -853,19 +856,20 @@ void Taskbar::update() {
   }
   auto tasks = gIPC->getSocket1JsonReply("clients");
   for (Json::Value &task: tasks) {
-    auto ws = task["workspace"]["id"].asString();
-    visible_clients.push_back(visible_workspaces.contains(ws));
+    if (task["pid"].asInt() > -1) {
+      auto ws = task["workspace"]["id"].asString();
+      if (visible_workspaces.contains(ws)) {
+        std::cout << "Found visible client: " << task["title"] << std::endl;
+      } else {
+        std::cout << "Found invisible client: " << task["title"] << std::endl;
+      }
+      visible_clients.push_back(visible_workspaces.contains(ws));
+    }
   }
 
   unsigned int i = 0;
   for (auto &t : tasks_) {
-    if (visible_clients[i]) {
-      if(hidden_list_.contains(t->getId())) {
-        hidden_list_.erase(t->getId());
-      }
-    } else {
-      hidden_list_.insert(t->getId());
-    }
+    t->setHidden(!visible_clients[i]);
     t->update();
     i++;
   }
