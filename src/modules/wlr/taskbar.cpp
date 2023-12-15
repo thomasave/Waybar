@@ -15,13 +15,10 @@
 #include <memory>
 #include <set>
 #include <sstream>
-#include <utility>
 
 #include "gdkmm/general.h"
-#include "glibmm/error.h"
 #include "glibmm/fileutils.h"
 #include "glibmm/refptr.h"
-#include "util/format.hpp"
 #include "util/rewrite_string.hpp"
 #include "util/string.hpp"
 #include "util/gtk_icon.hpp"
@@ -29,7 +26,6 @@
 namespace waybar::modules::wlr {
 
 using namespace hyprland;
-
 /* Icon loading functions */
 static std::vector<std::string> search_prefix() {
   std::vector<std::string> prefixes = {""};
@@ -124,6 +120,13 @@ Glib::RefPtr<Gio::DesktopAppInfo> get_desktop_app_info(const std::string &app_id
   g_free(desktop_list);
 
   return get_app_info_by_name(desktop_file);
+}
+
+void Task::setAddress(std::string address) {
+  address_ = address;
+}
+std::string Task::getAddress() const {
+  return address_;
 }
 
 void Task::set_app_info_from_app_id_list(const std::string &app_id_list) {
@@ -749,6 +752,7 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
       box_{bar.vertical ? Gtk::ORIENTATION_VERTICAL : Gtk::ORIENTATION_HORIZONTAL, 0},
       manager_{nullptr},
       seat_{nullptr} {
+  modulesReady = true;
   box_.set_name("taskbar");
   if (!id.empty()) {
     box_.get_style_context()->add_class(id);
@@ -810,7 +814,42 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
 
   icon_themes_.push_back(Gtk::IconTheme::get_default());
 
-  ipc = std::make_unique<IPC>();
+  IPC::get().registerForIPC("workspace", this);
+  IPC::get().registerForIPC("createworkspace", this);
+  IPC::get().registerForIPC("destroyworkspace", this);
+  IPC::get().registerForIPC("focusedmon", this);
+  IPC::get().registerForIPC("moveworkspace", this);
+  IPC::get().registerForIPC("renameworkspace", this);
+  IPC::get().registerForIPC("openwindow", this);
+  IPC::get().registerForIPC("closewindow", this);
+  IPC::get().registerForIPC("movewindow", this);
+  IPC::get().registerForIPC("urgent", this);
+  auto tasks = IPC::get().getSocket1JsonReply("clients");
+  for (Json::Value &task: tasks) {
+    if (task["pid"].asInt() > -1) {
+      new_addresses_.push(task["address"].asString());
+    }
+  }
+}
+
+void Taskbar::onEvent(const std::string & ev) {
+  std::string eventName(begin(ev), begin(ev) + ev.find_first_of('>'));
+  std::string payload = ev.substr(eventName.size() + 2);
+  if (eventName == "openwindow") {
+    if (payload.find("Rofi") != std::string::npos) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    std::string address = "0x" + payload.substr(0, payload.find_first_of(','));
+    if (new_tasks_.empty()) {
+      new_addresses_.push(address);
+    } else {
+      Task* t = new_tasks_.top();
+      t->setAddress(address);
+      new_tasks_.pop();
+    }
+  }
+  update();
 }
 
 Taskbar::~Taskbar() {
@@ -833,9 +872,10 @@ Taskbar::~Taskbar() {
 }
 
 void Taskbar::update() {
-  auto monitors = ipc->getSocket1JsonReply("monitors");
+  std::lock_guard<std::mutex> lock(mutex_);
+  auto monitors = IPC::get().getSocket1JsonReply("monitors");
   std::set<std::string> visible_workspaces;
-  std::vector<bool> visible_clients;
+  std::set<std::string> visible_clients;
   for (Json::Value &monitor : monitors) {
     if (monitor["focused"].asBool()) {
       auto ws = monitor["activeWorkspace"];
@@ -844,19 +884,19 @@ void Taskbar::update() {
       }
     }
   }
-  auto tasks = ipc->getSocket1JsonReply("clients");
+  auto tasks = IPC::get().getSocket1JsonReply("clients");
   for (Json::Value &task: tasks) {
     if (task["pid"].asInt() > -1) {
       auto ws = task["workspace"]["id"].asString();
-      visible_clients.push_back(visible_workspaces.contains(ws));
+      if (visible_workspaces.contains(ws)) {
+        visible_clients.insert(task["address"].asString());
+      }
     }
   }
 
-  unsigned int i = 0;
   for (auto &t : tasks_) {
-    t->setHidden(!visible_clients[i]);
+    t->setHidden(!visible_clients.contains(t->getAddress()));
     t->update();
-    i++;
   }
 
   if (config_["sort-by-app-id"].asBool()) {
@@ -922,7 +962,15 @@ void Taskbar::register_seat(struct wl_registry *registry, uint32_t name, uint32_
 }
 
 void Taskbar::handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *tl_handle) {
-  tasks_.push_back(std::make_unique<Task>(bar_, config_, this, tl_handle, seat_));
+  std::lock_guard<std::mutex> lock(mutex_);
+  TaskPtr newTask = std::make_unique<Task>(bar_, config_, this, tl_handle, seat_);
+  if (!new_addresses_.empty()) {
+    newTask->setAddress(new_addresses_.top());
+    new_addresses_.pop();
+  } else {
+    new_tasks_.push(newTask.get());
+  }
+  tasks_.push_back(std::move(newTask));
 }
 
 void Taskbar::handle_finished() {

@@ -24,6 +24,7 @@ class IPC {
 
   void registerForIPC(const std::string&, EventHandler*);
   void unregisterForIPC(EventHandler*);
+  static IPC& get();
 
   std::string getSocket1Reply(const std::string& rq);
   Json::Value getSocket1JsonReply(const std::string& rq);
@@ -32,6 +33,7 @@ class IPC {
   void startIPC();
   void parseIPC(const std::string&);
 
+  static std::mutex getMutex;
   std::mutex callbackMutex;
   util::JsonParser parser_;
   std::list<std::pair<std::string, EventHandler*>> callbacks;

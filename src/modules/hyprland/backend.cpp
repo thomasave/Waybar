@@ -19,6 +19,8 @@
 
 namespace waybar::modules::hyprland {
 
+std::mutex IPC::getMutex{};
+
 void IPC::startIPC() {
   // will start IPC and relay events to parseIPC
 
@@ -87,6 +89,15 @@ void IPC::startIPC() {
       std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }).detach();
+}
+
+IPC& IPC::get() {
+  getMutex.lock();
+  if (!gIPC) {
+    gIPC = std::make_unique<IPC>();
+  }
+  getMutex.unlock();
+  return *gIPC;
 }
 
 void IPC::parseIPC(const std::string& ev) {

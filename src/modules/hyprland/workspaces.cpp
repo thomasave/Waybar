@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <charconv>
+#include <iostream>
 #include <memory>
 #include <string>
 #include <utility>
@@ -46,10 +47,6 @@ Workspaces::Workspaces(const std::string &id, const Bar &bar, const Json::Value 
     box_.get_style_context()->add_class(id);
   }
   event_box_.add(box_);
-
-  if (!gIPC.get()) {
-    gIPC = std::make_unique<IPC>();
-  }
 
   init();
   register_ipc();
@@ -131,22 +128,22 @@ auto Workspaces::parse_config(const Json::Value &config) -> void {
 }
 
 auto Workspaces::register_ipc() -> void {
-  gIPC->registerForIPC("workspace", this);
-  gIPC->registerForIPC("createworkspace", this);
-  gIPC->registerForIPC("destroyworkspace", this);
-  gIPC->registerForIPC("focusedmon", this);
-  gIPC->registerForIPC("moveworkspace", this);
-  gIPC->registerForIPC("renameworkspace", this);
-  gIPC->registerForIPC("openwindow", this);
-  gIPC->registerForIPC("closewindow", this);
-  gIPC->registerForIPC("movewindow", this);
-  gIPC->registerForIPC("urgent", this);
+  IPC::get().registerForIPC("workspace", this);
+  IPC::get().registerForIPC("createworkspace", this);
+  IPC::get().registerForIPC("destroyworkspace", this);
+  IPC::get().registerForIPC("focusedmon", this);
+  IPC::get().registerForIPC("moveworkspace", this);
+  IPC::get().registerForIPC("renameworkspace", this);
+  IPC::get().registerForIPC("openwindow", this);
+  IPC::get().registerForIPC("closewindow", this);
+  IPC::get().registerForIPC("movewindow", this);
+  IPC::get().registerForIPC("urgent", this);
 
   if (window_rewrite_config_uses_title()) {
     spdlog::info(
         "Registering for Hyprland's 'windowtitle' events because a user-defined window "
         "rewrite rule uses the 'title' field.");
-    gIPC->registerForIPC("windowtitle", this);
+    IPC::get().registerForIPC("windowtitle", this);
   }
 }
 
@@ -172,7 +169,7 @@ auto Workspaces::update() -> void {
   }
 
   // get all active workspaces
-  auto monitors = gIPC->getSocket1JsonReply("monitors");
+  auto monitors = IPC::get().getSocket1JsonReply("monitors");
   std::vector<std::string> visible_workspaces;
   for (Json::Value &monitor : monitors) {
     auto ws = monitor["activeWorkspace"];
@@ -293,7 +290,7 @@ void Workspaces::on_workspace_destroyed(std::string const &payload) {
 }
 
 void Workspaces::on_workspace_created(std::string const &payload) {
-  const Json::Value workspaces_json = gIPC->getSocket1JsonReply("workspaces");
+  const Json::Value workspaces_json = IPC::get().getSocket1JsonReply("workspaces");
 
   if (!is_workspace_ignored(payload)) {
     for (Json::Value workspace_json : workspaces_json) {
@@ -313,7 +310,7 @@ void Workspaces::on_workspace_moved(std::string const &payload) {
   std::string new_output = payload.substr(payload.find(',') + 1);
   bool should_show = show_special() || !workspace.starts_with("special");
   if (should_show && bar_.output->name == new_output) {  // TODO: implement this better
-    const Json::Value workspaces_json = gIPC->getSocket1JsonReply("workspaces");
+    const Json::Value workspaces_json = IPC::get().getSocket1JsonReply("workspaces");
     for (Json::Value workspace_json : workspaces_json) {
       std::string name = workspace_json["name"].asString();
       if (name == workspace && bar_.output->name == workspace_json["monitor"].asString()) {
@@ -417,7 +414,7 @@ void Workspaces::on_window_title_event(std::string const &payload) {
                    [payload](auto &workspace) { return workspace->contains_window(payload); });
 
   if (window_workspace != workspaces_.end()) {
-    Json::Value clients_data = gIPC->getSocket1JsonReply("clients");
+    Json::Value clients_data = IPC::get().getSocket1JsonReply("clients");
     std::string json_window_address = fmt::format("0x{}", payload);
 
     auto client =
@@ -432,7 +429,7 @@ void Workspaces::on_window_title_event(std::string const &payload) {
 }
 
 void Workspaces::update_window_count() {
-  const Json::Value workspaces_json = gIPC->getSocket1JsonReply("workspaces");
+  const Json::Value workspaces_json = IPC::get().getSocket1JsonReply("workspaces");
   for (auto &workspace : workspaces_) {
     auto workspace_json = std::find_if(
         workspaces_json.begin(), workspaces_json.end(),
@@ -608,12 +605,12 @@ void Workspaces::create_persistent_workspaces() {
 }
 
 void Workspaces::init() {
-  active_workspace_name_ = (gIPC->getSocket1JsonReply("activeworkspace"))["name"].asString();
+  active_workspace_name_ = (IPC::get().getSocket1JsonReply("activeworkspace"))["name"].asString();
   active_monitor_name_ = bar_.output->name;
 
   // get monitor ID from name (used by persistent workspaces)
   monitor_id_ = 0;
-  auto monitors = gIPC->getSocket1JsonReply("monitors");
+  auto monitors = IPC::get().getSocket1JsonReply("monitors");
   auto current_monitor = std::find_if(
       monitors.begin(), monitors.end(),
       [this](const Json::Value &m) { return m["name"].asString() == bar_.output->name; });
@@ -623,8 +620,8 @@ void Workspaces::init() {
     monitor_id_ = (*current_monitor)["id"].asInt();
   }
 
-  const Json::Value workspaces_json = gIPC->getSocket1JsonReply("workspaces");
-  const Json::Value clients_json = gIPC->getSocket1JsonReply("clients");
+  const Json::Value workspaces_json = IPC::get().getSocket1JsonReply("workspaces");
+  const Json::Value clients_json = IPC::get().getSocket1JsonReply("clients");
 
   for (Json::Value workspace_json : workspaces_json) {
     std::string workspace_name = workspace_json["name"].asString();
@@ -646,7 +643,7 @@ void Workspaces::init() {
 }
 
 Workspaces::~Workspaces() {
-  gIPC->unregisterForIPC(this);
+  IPC::get().unregisterForIPC(this);
   // wait for possible event handler to finish
   std::lock_guard<std::mutex> lg(mutex_);
 }
@@ -859,13 +856,13 @@ bool Workspace::handle_clicked(GdkEventButton *bt) const {
   if (bt->type == GDK_BUTTON_PRESS) {
     try {
       if (id() > 0) {  // normal or numbered persistent
-        gIPC->getSocket1Reply("dispatch workspace " + std::to_string(id()));
+        IPC::get().getSocket1Reply("dispatch workspace " + std::to_string(id()));
       } else if (!is_special()) {  // named
-        gIPC->getSocket1Reply("dispatch workspace name:" + name());
+        IPC::get().getSocket1Reply("dispatch workspace name:" + name());
       } else if (id() != -99) {  // named special
-        gIPC->getSocket1Reply("dispatch togglespecialworkspace " + name());
+        IPC::get().getSocket1Reply("dispatch togglespecialworkspace " + name());
       } else {  // special
-        gIPC->getSocket1Reply("dispatch togglespecialworkspace");
+        IPC::get().getSocket1Reply("dispatch togglespecialworkspace");
       }
       return true;
     } catch (const std::exception &e) {
@@ -876,7 +873,7 @@ bool Workspace::handle_clicked(GdkEventButton *bt) const {
 }
 
 void Workspaces::set_urgent_workspace(std::string const &windowaddress) {
-  const Json::Value clients_json = gIPC->getSocket1JsonReply("clients");
+  const Json::Value clients_json = IPC::get().getSocket1JsonReply("clients");
   int workspace_id = -1;
 
   for (Json::Value client_json : clients_json) {

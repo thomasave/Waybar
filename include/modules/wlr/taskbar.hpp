@@ -11,6 +11,7 @@
 
 #include <map>
 #include <memory>
+#include <queue>
 #include <set>
 #include <string>
 #include <unordered_set>
@@ -34,6 +35,8 @@ class Task {
        struct zwlr_foreign_toplevel_handle_v1 *, struct wl_seat *);
   ~Task();
   uint32_t getId() const;
+  void setAddress(std::string address);
+  std::string getAddress() const;
   void setHidden(bool value);
 
  public:
@@ -78,6 +81,7 @@ class Task {
   std::string name_;
   std::string title_;
   std::string app_id_;
+  std::string address_;
   uint32_t state_ = 0;
 
   int32_t drag_start_x;
@@ -140,17 +144,19 @@ class Task {
 
 using TaskPtr = std::unique_ptr<Task>;
 
-class Taskbar : public waybar::AModule {
+class Taskbar : public waybar::AModule, public hyprland::EventHandler {
  public:
   Taskbar(const std::string &, const waybar::Bar &, const Json::Value &);
   ~Taskbar();
   void update();
 
  private:
-  std::unique_ptr<hyprland::IPC> ipc;
   const waybar::Bar &bar_;
   Gtk::Box box_;
   std::vector<TaskPtr> tasks_;
+  std::mutex mutex_;
+  std::stack<Task*> new_tasks_;
+  std::stack<std::string> new_addresses_;
 
   std::vector<Glib::RefPtr<Gtk::IconTheme>> icon_themes_;
   std::unordered_set<std::string> ignore_list_;
@@ -158,6 +164,7 @@ class Taskbar : public waybar::AModule {
 
   struct zwlr_foreign_toplevel_manager_v1 *manager_;
   struct wl_seat *seat_;
+  void onEvent(const std::string& e) override;
 
  public:
   /* Callbacks for global registration */
