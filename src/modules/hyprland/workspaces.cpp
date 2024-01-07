@@ -612,6 +612,7 @@ void Workspaces::init() {
     spdlog::error("Monitor '{}' does not have an ID? Using 0", m_bar.output->name);
   } else {
     m_monitorId = (*currentMonitor)["id"].asInt();
+    m_activeMonitorName = (*currentMonitor)["name"].asString();
   }
 
   const Json::Value workspacesJson = IPC::get().getSocket1JsonReply("workspaces");
