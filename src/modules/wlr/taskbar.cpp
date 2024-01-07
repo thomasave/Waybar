@@ -815,15 +815,10 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   icon_themes_.push_back(Gtk::IconTheme::get_default());
 
   IPC::get().registerForIPC("workspace", this);
-  IPC::get().registerForIPC("createworkspace", this);
-  IPC::get().registerForIPC("destroyworkspace", this);
   IPC::get().registerForIPC("focusedmon", this);
-  IPC::get().registerForIPC("moveworkspace", this);
-  IPC::get().registerForIPC("renameworkspace", this);
   IPC::get().registerForIPC("openwindow", this);
   IPC::get().registerForIPC("closewindow", this);
   IPC::get().registerForIPC("movewindow", this);
-  IPC::get().registerForIPC("urgent", this);
   auto tasks = IPC::get().getSocket1JsonReply("clients");
   for (Json::Value &task: tasks) {
     if (task["pid"].asInt() > -1) {
