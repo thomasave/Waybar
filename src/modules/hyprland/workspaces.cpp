@@ -5,13 +5,17 @@
 
 #include <algorithm>
 #include <memory>
+#include <shared_mutex>
 #include <string>
+#include <thread>
 #include <utility>
 #include <variant>
 
 #include "util/regex_collection.hpp"
 
 namespace waybar::modules::hyprland {
+
+std::shared_mutex workspaceCreateSmtx;
 
 int Workspaces::windowRewritePriorityFunction(std::string const &window_rule) {
   // Rules that match against title are prioritized
@@ -156,6 +160,7 @@ auto Workspaces::update() -> void {
   }
 
   // add workspaces that wait to be created
+  std::shared_lock<std::shared_mutex> workspaceCreateShareLock(workspaceCreateSmtx);
   unsigned int currentCreateWorkspaceNum = 0;
   for (Json::Value const &workspaceToCreate : m_workspacesToCreate) {
     createWorkspace(workspaceToCreate);
@@ -295,6 +300,7 @@ void Workspaces::onWorkspaceCreated(std::string const &payload) {
       if (name == payload &&
           (allOutputs() || m_bar.output->name == workspaceJson["monitor"].asString()) &&
           (showSpecial() || !name.starts_with("special")) && !isDoubleSpecial(payload)) {
+        std::unique_lock<std::shared_mutex> workspaceCreateUniqueLock(workspaceCreateSmtx);
         m_workspacesToCreate.push_back(workspaceJson);
         break;
       }
@@ -892,7 +898,9 @@ std::string Workspaces::getRewrite(std::string window_class, std::string window_
   } else {
     windowReprKey = fmt::format("class<{}>", window_class);
   }
-  return m_windowRewriteRules.get(windowReprKey);
+  auto const rewriteRule = m_windowRewriteRules.get(windowReprKey);
+  return fmt::format(fmt::runtime(rewriteRule), fmt::arg("class", window_class),
+                     fmt::arg("title", window_title));
 }
 
 WindowCreationPayload::WindowCreationPayload(std::string workspace_name,

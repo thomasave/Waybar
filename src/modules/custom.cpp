@@ -5,15 +5,17 @@
 #include "util/scope_guard.hpp"
 
 waybar::modules::Custom::Custom(const std::string& name, const std::string& id,
-                                const Json::Value& config)
+                                const Json::Value& config, const std::string& output_name)
     : ALabel(config, "custom-" + name, id, "{}"),
       name_(name),
+      output_name_(output_name),
       id_(id),
       percentage_(0),
       fp_(nullptr),
       pid_(-1) {
   dp.emit();
-  if (!config_["signal"].empty() && config_["interval"].empty()) {
+  if (!config_["signal"].empty() && config_["interval"].empty() &&
+      config_["restart-interval"].empty()) {
     waitingWorker();
   } else if (interval_.count() > 0) {
     delayWorker();
@@ -42,7 +44,7 @@ void waybar::modules::Custom::delayWorker() {
     }
     if (can_update) {
       if (config_["exec"].isString()) {
-        output_ = util::command::exec(config_["exec"].asString());
+        output_ = util::command::exec(config_["exec"].asString(), output_name_);
       }
       dp.emit();
     }
@@ -53,7 +55,7 @@ void waybar::modules::Custom::delayWorker() {
 void waybar::modules::Custom::continuousWorker() {
   auto cmd = config_["exec"].asString();
   pid_ = -1;
-  fp_ = util::command::open(cmd, pid_);
+  fp_ = util::command::open(cmd, pid_, output_name_);
   if (!fp_) {
     throw std::runtime_error("Unable to open " + cmd);
   }
@@ -79,7 +81,7 @@ void waybar::modules::Custom::continuousWorker() {
       if (config_["restart-interval"].isUInt()) {
         pid_ = -1;
         thread_.sleep_for(std::chrono::seconds(config_["restart-interval"].asUInt()));
-        fp_ = util::command::open(cmd, pid_);
+        fp_ = util::command::open(cmd, pid_, output_name_);
         if (!fp_) {
           throw std::runtime_error("Unable to open " + cmd);
         }
@@ -112,7 +114,7 @@ void waybar::modules::Custom::waitingWorker() {
     }
     if (can_update) {
       if (config_["exec"].isString()) {
-        output_ = util::command::exec(config_["exec"].asString());
+        output_ = util::command::exec(config_["exec"].asString(), output_name_);
       }
       dp.emit();
     }
