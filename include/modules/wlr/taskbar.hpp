@@ -154,13 +154,14 @@ class Taskbar : public waybar::AModule, public hyprland::EventHandler {
   const waybar::Bar &bar_;
   Gtk::Box box_;
   std::vector<TaskPtr> tasks_;
-  std::mutex mutex_;
+  std::mutex m_mutex;
   std::stack<Task*> new_tasks_;
   std::stack<std::string> new_addresses_;
 
   std::vector<Glib::RefPtr<Gtk::IconTheme>> icon_themes_;
   std::unordered_set<std::string> ignore_list_;
   std::map<std::string, std::string> app_ids_replace_map_;
+  static std::map<std::string, std::string> m_app_id_address_map;
 
   struct zwlr_foreign_toplevel_manager_v1 *manager_;
   struct wl_seat *seat_;

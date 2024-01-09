@@ -27,6 +27,10 @@ namespace waybar::modules::wlr {
 
 using namespace hyprland;
 /* Icon loading functions */
+
+
+std::map<std::string, std::string> Taskbar::m_app_id_address_map;
+
 static std::vector<std::string> search_prefix() {
   std::vector<std::string> prefixes = {""};
 
@@ -390,8 +394,7 @@ std::string Task::state_string(bool shortened) const {
   std::string res = ss.str();
   if (shortened || res.empty())
     return res;
-  else
-    return res.substr(0, res.size() - 1);
+  return res.substr(0, res.size() - 1);
 }
 
 void Task::handle_title(const char *title) {
@@ -834,7 +837,7 @@ void Taskbar::onEvent(const std::string & ev) {
     if (payload.find("Rofi") != std::string::npos) {
       return;
     }
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::lock_guard<std::mutex> lock(m_mutex);
     std::string address = "0x" + payload.substr(0, payload.find_first_of(','));
     if (new_tasks_.empty()) {
       new_addresses_.push(address);
@@ -842,9 +845,10 @@ void Taskbar::onEvent(const std::string & ev) {
       Task* t = new_tasks_.top();
       t->setAddress(address);
       new_tasks_.pop();
+      m_app_id_address_map[t->app_id()] = address;
     }
   }
-  update();
+  dp.emit();
 }
 
 Taskbar::~Taskbar() {
@@ -864,10 +868,13 @@ Taskbar::~Taskbar() {
       manager_ = nullptr;
     }
   }
+  IPC::get().unregisterForIPC(this);
+  // wait for possible event handler to finish
+  std::lock_guard<std::mutex> lg(m_mutex);
 }
 
 void Taskbar::update() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(m_mutex);
   auto monitors = IPC::get().getSocket1JsonReply("monitors");
   std::set<std::string> visible_workspaces;
   std::set<std::string> visible_clients;
@@ -957,10 +964,15 @@ void Taskbar::register_seat(struct wl_registry *registry, uint32_t name, uint32_
 }
 
 void Taskbar::handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *tl_handle) {
-  std::lock_guard<std::mutex> lock(mutex_);
+  std::lock_guard<std::mutex> lock(m_mutex);
   TaskPtr newTask = std::make_unique<Task>(bar_, config_, this, tl_handle, seat_);
   if (!new_addresses_.empty()) {
-    newTask->setAddress(new_addresses_.top());
+    if (m_app_id_address_map.contains(newTask->app_id())) {
+      newTask->setAddress(m_app_id_address_map[newTask->app_id()]);
+    } else {
+      newTask->setAddress(new_addresses_.top());
+      m_app_id_address_map[newTask->app_id()] = newTask->getAddress();
+    }
     new_addresses_.pop();
   } else {
     new_tasks_.push(newTask.get());
@@ -996,6 +1008,7 @@ void Taskbar::remove_task(uint32_t id) {
     return;
   }
 
+  m_app_id_address_map.erase((*it)->app_id());
   tasks_.erase(it);
 }
 
