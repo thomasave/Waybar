@@ -13,6 +13,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <memory>
+#include <ranges>
 #include <set>
 #include <sstream>
 
@@ -28,6 +29,8 @@ namespace waybar::modules::wlr {
 using namespace hyprland;
 /* Icon loading functions */
 
+
+std::vector<std::string> Taskbar::m_address_list;
 
 static std::vector<std::string> search_prefix() {
   std::vector<std::string> prefixes = {""};
@@ -820,10 +823,17 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   IPC::get().registerForIPC("openwindow", this);
   IPC::get().registerForIPC("closewindow", this);
   IPC::get().registerForIPC("movewindow", this);
-  auto tasks = IPC::get().getSocket1JsonReply("clients");
-  for (Json::Value &task: tasks) {
-    if (task["pid"].asInt() > -1) {
-      new_addresses_.push(task["address"].asString());
+  if (!m_address_list.empty()) {
+    for (auto & it : std::ranges::reverse_view(m_address_list)) {
+      m_new_addresses.push(it);
+    }
+    m_address_list = {};
+  } else {
+    auto tasks = IPC::get().getSocket1JsonReply("clients");
+    for (Json::Value &task: tasks) {
+      if (task["pid"].asInt() > -1) {
+        m_new_addresses.push(task["address"].asString());
+      }
     }
   }
 }
@@ -837,8 +847,9 @@ void Taskbar::onEvent(const std::string & ev) {
     }
     std::lock_guard<std::mutex> lock(m_mutex);
     std::string address = "0x" + payload.substr(0, payload.find_first_of(','));
+    m_address_list.emplace_back(address);
     if (new_tasks_.empty()) {
-      new_addresses_.push(address);
+      m_new_addresses.push(address);
     } else {
       Task* t = new_tasks_.top();
       t->setAddress(address);
@@ -963,9 +974,9 @@ void Taskbar::register_seat(struct wl_registry *registry, uint32_t name, uint32_
 void Taskbar::handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *tl_handle) {
   std::lock_guard<std::mutex> lock(m_mutex);
   TaskPtr newTask = std::make_unique<Task>(bar_, config_, this, tl_handle, seat_);
-  if (!new_addresses_.empty()) {
-    newTask->setAddress(new_addresses_.top());
-    new_addresses_.pop();
+  if (!m_new_addresses.empty()) {
+    newTask->setAddress(m_new_addresses.top());
+    m_new_addresses.pop();
   } else {
     new_tasks_.push(newTask.get());
   }
@@ -1000,6 +1011,7 @@ void Taskbar::remove_task(uint32_t id) {
     return;
   }
 
+  m_address_list.erase(std::find(m_address_list.begin(), m_address_list.end(), (*it)->getAddress()));
   tasks_.erase(it);
 }
 
