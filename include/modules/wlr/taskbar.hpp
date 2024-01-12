@@ -161,7 +161,6 @@ class Taskbar : public waybar::AModule, public hyprland::EventHandler {
   std::vector<Glib::RefPtr<Gtk::IconTheme>> icon_themes_;
   std::unordered_set<std::string> ignore_list_;
   std::map<std::string, std::string> app_ids_replace_map_;
-  static std::map<std::string, std::string> m_app_id_address_map;
 
   struct zwlr_foreign_toplevel_manager_v1 *manager_;
   struct wl_seat *seat_;

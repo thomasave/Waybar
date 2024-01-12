@@ -29,8 +29,6 @@ using namespace hyprland;
 /* Icon loading functions */
 
 
-std::map<std::string, std::string> Taskbar::m_app_id_address_map;
-
 static std::vector<std::string> search_prefix() {
   std::vector<std::string> prefixes = {""};
 
@@ -845,7 +843,6 @@ void Taskbar::onEvent(const std::string & ev) {
       Task* t = new_tasks_.top();
       t->setAddress(address);
       new_tasks_.pop();
-      m_app_id_address_map[t->app_id()] = address;
     }
   }
   dp.emit();
@@ -967,12 +964,7 @@ void Taskbar::handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *tl_
   std::lock_guard<std::mutex> lock(m_mutex);
   TaskPtr newTask = std::make_unique<Task>(bar_, config_, this, tl_handle, seat_);
   if (!new_addresses_.empty()) {
-    if (m_app_id_address_map.contains(newTask->app_id())) {
-      newTask->setAddress(m_app_id_address_map[newTask->app_id()]);
-    } else {
-      newTask->setAddress(new_addresses_.top());
-      m_app_id_address_map[newTask->app_id()] = newTask->getAddress();
-    }
+    newTask->setAddress(new_addresses_.top());
     new_addresses_.pop();
   } else {
     new_tasks_.push(newTask.get());
@@ -1008,7 +1000,6 @@ void Taskbar::remove_task(uint32_t id) {
     return;
   }
 
-  m_app_id_address_map.erase((*it)->app_id());
   tasks_.erase(it);
 }
 
