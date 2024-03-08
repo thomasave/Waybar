@@ -756,6 +756,7 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
       box_{bar.orientation, 0},
       manager_{nullptr},
       seat_{nullptr} {
+
   modulesReady = true;
   box_.set_name("taskbar");
   if (!id.empty()) {
@@ -824,11 +825,11 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   IPC::get().registerForIPC("openwindow", this);
   IPC::get().registerForIPC("closewindow", this);
   IPC::get().registerForIPC("movewindow", this);
+
   if (!m_address_list.empty()) {
     for (auto & it : std::ranges::reverse_view(m_address_list)) {
       m_new_addresses.push(it);
     }
-    m_address_list = {};
   } else {
     auto tasks = IPC::get().getSocket1JsonReply("clients");
     for (Json::Value &task: tasks) {
@@ -1012,7 +1013,12 @@ void Taskbar::remove_task(uint32_t id) {
     return;
   }
 
-  m_address_list.erase(std::find(m_address_list.begin(), m_address_list.end(), (*it)->getAddress()));
+  auto addressIt = std::find(m_address_list.begin(), m_address_list.end(), (*it)->getAddress());
+  if (addressIt != m_address_list.end()) {
+    m_address_list.erase(addressIt);
+  } else {
+    spdlog::warn("Can't find address {} in m_address_list", (*it)->getAddress());
+  }
   tasks_.erase(it);
 }
 
