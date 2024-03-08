@@ -293,7 +293,7 @@ Task::Task(const waybar::Bar &bar, const Json::Value &config, Taskbar *tbar,
       handle_{tl_handle},
       seat_{seat},
       id_{global_id++},
-      content_{bar.vertical ? Gtk::ORIENTATION_VERTICAL : Gtk::ORIENTATION_HORIZONTAL, 0} {
+      content_{bar.orientation, 0} {
   zwlr_foreign_toplevel_handle_v1_add_listener(handle_, &toplevel_handle_impl, this);
 
   button.set_relief(Gtk::RELIEF_NONE);
@@ -550,11 +550,11 @@ void Task::handle_closed() {
   spdlog::debug("{} closed", repr());
   zwlr_foreign_toplevel_handle_v1_destroy(handle_);
   handle_ = nullptr;
-  tbar_->remove_task(id_);
   if (button_visible_) {
     tbar_->remove_button(button);
     button_visible_ = false;
   }
+  tbar_->remove_task(id_);
 }
 
 bool Task::handle_clicked(GdkEventButton *bt) {
@@ -753,7 +753,7 @@ static const wl_registry_listener registry_listener_impl = {.global = handle_glo
 Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Value &config)
     : waybar::AModule(config, "taskbar", id, false, false),
       bar_(bar),
-      box_{bar.vertical ? Gtk::ORIENTATION_VERTICAL : Gtk::ORIENTATION_HORIZONTAL, 0},
+      box_{bar.orientation, 0},
       manager_{nullptr},
       seat_{nullptr} {
   modulesReady = true;
@@ -761,6 +761,7 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   if (!id.empty()) {
     box_.get_style_context()->add_class(id);
   }
+  box_.get_style_context()->add_class(MODULE_CLASS);
   box_.get_style_context()->add_class("empty");
   event_box_.add(box_);
 

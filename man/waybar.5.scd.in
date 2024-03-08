@@ -16,7 +16,7 @@ Valid locations for this file are:
 - */etc/xdg/waybar/*
 - *@sysconfdir@/xdg/waybar/*
 
-A good starting point is the default configuration found at https://github.com/Alexays/Waybar/blob/master/resources/config
+A good starting point is the default configuration found at https://github.com/Alexays/Waybar/blob/master/resources/config.jsonc
 Also, a minimal example configuration can be found at the bottom of this man page.
 
 # BAR CONFIGURATION
@@ -108,12 +108,6 @@ Also, a minimal example configuration can be found at the bottom of this man pag
 	Option to pass any pointer events to the window under the bar.
 	Intended to be used with either *top* or *overlay* layers and without exclusive zone.
 
-*gtk-layer-shell* ++
-	typeof: bool ++
-	default: true ++
-	Option to disable the use of gtk-layer-shell for popups.
-	Only functional if compiled with gtk-layer-shell support.
-
 *ipc* ++
 	typeof: bool ++
 	default: false ++
@@ -129,6 +123,11 @@ Also, a minimal example configuration can be found at the bottom of this man pag
 	Paths to additional configuration files.
 	Each file can contain a single object with any of the bar configuration options. In case of duplicate options, the first defined value takes precedence, i.e. including file -> first included file -> etc. Nested includes are permitted, but make sure to avoid circular imports.
 	For a multi-bar config, the include directive affects only current bar configuration object.
+
+*reload_style_on_change* ++
+	typeof: bool ++
+	default: *false* ++
+	Option to enable reloading the css style if a modification is detected on the style sheet file or any imported css files.
 
 # MODULE FORMAT
 
