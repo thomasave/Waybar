@@ -83,6 +83,11 @@ auto Workspaces::parseConfig(const Json::Value &config) -> void {
     m_activeOnly = configActiveOnly.asBool();
   }
 
+  auto configMoveToMonitor = config_["move-to-monitor"];
+  if (configMoveToMonitor.isBool()) {
+    m_moveToMonitor = configMoveToMonitor.asBool();
+  }
+
   auto configSortBy = config_["sort-by"];
   if (configSortBy.isString()) {
     auto sortByStr = configSortBy.asString();
@@ -207,6 +212,7 @@ void Workspaces::doUpdate() {
   }
 
   spdlog::trace("Updating workspace states");
+  auto updated_workspaces = gIPC->getSocket1JsonReply("workspaces");
   for (auto &workspace : m_workspaces) {
     // active
     workspace->setActive(workspace->name() == m_activeWorkspaceName ||
@@ -225,6 +231,19 @@ void Workspaces::doUpdate() {
     if (m_withIcon) {
       workspaceIcon = workspace->selectIcon(m_iconsMap);
     }
+
+    // update m_output
+    auto updated_workspace =
+        std::find_if(updated_workspaces.begin(), updated_workspaces.end(), [&workspace](auto &w) {
+          auto wNameRaw = w["name"].asString();
+          auto wName = wNameRaw.starts_with("special:") ? wNameRaw.substr(8) : wNameRaw;
+          return wName == workspace->name();
+        });
+
+    if (updated_workspace != updated_workspaces.end()) {
+      workspace->setOutput((*updated_workspace)["monitor"].asString());
+    }
+
     workspace->update(m_format, workspaceIcon);
   }
 
@@ -881,6 +900,7 @@ void Workspace::update(const std::string &format, const std::string &icon) {
   addOrRemoveClass(styleContext, isPersistent(), "persistent");
   addOrRemoveClass(styleContext, isUrgent(), "urgent");
   addOrRemoveClass(styleContext, isVisible(), "visible");
+  addOrRemoveClass(styleContext, m_workspaceManager.getBarOutput() == output(), "hosting-monitor");
 
   std::string windows;
   auto windowSeparator = m_workspaceManager.getWindowSeparator();
@@ -1028,9 +1048,17 @@ bool Workspace::handleClicked(GdkEventButton *bt) const {
   if (bt->type == GDK_BUTTON_PRESS) {
     try {
       if (id() > 0) {  // normal
-        IPC::get().getSocket1Reply("dispatch workspace " + std::to_string(id()));
+        if (m_workspaceManager.moveToMonitor()) {
+          IPC::get().getSocket1Reply("dispatch focusworkspaceoncurrentmonitor " + std::to_string(id()));
+        } else {
+          IPC::get().getSocket1Reply("dispatch workspace " + std::to_string(id()));
+        }
       } else if (!isSpecial()) {  // named (this includes persistent)
-        IPC::get().getSocket1Reply("dispatch workspace name:" + name());
+        if (m_workspaceManager.moveToMonitor()) {
+          IPC::get().getSocket1Reply("dispatch focusworkspaceoncurrentmonitor name:" + name());
+        } else {
+          IPC::get().getSocket1Reply("dispatch workspace name:" + name());
+        }
       } else if (id() != -99) {  // named special
         IPC::get().getSocket1Reply("dispatch togglespecialworkspace " + name());
       } else {  // special
