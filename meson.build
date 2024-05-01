@@ -1,6 +1,6 @@
 project(
     'waybar', 'cpp', 'c',
-    version: '0.10.0',
+    version: '0.10.2',
     license: 'MIT',
     meson_version: '>= 0.59.0',
     default_options : [
@@ -348,7 +348,8 @@ if pipewire.found()
     src_files += files(
         'src/modules/privacy/privacy.cpp',
         'src/modules/privacy/privacy_item.cpp',
-        'src/util/pipewire_backend.cpp',
+        'src/util/pipewire/pipewire_backend.cpp',
+        'src/util/pipewire/privacy_node_info.cpp',
     )
     man_files += files('man/waybar-privacy.5.scd')
 endif
@@ -533,6 +534,14 @@ if scdoc.found()
     man_files += configure_file(
         input: 'man/waybar.5.scd.in',
         output: 'waybar.5.scd',
+        configuration: {
+            'sysconfdir': prefix / sysconfdir
+        }
+    )
+
+    man_files += configure_file(
+        input: 'man/waybar-styles.5.scd.in',
+        output: 'waybar-styles.5.scd',
         configuration: {
             'sysconfdir': prefix / sysconfdir
         }
