@@ -1,5 +1,5 @@
 pkgname=waybar-thomasave-git
-pkgver=r3049.42268e46
+pkgver=r3434.efbbef48
 pkgrel=1
 pkgdesc='Highly customizable Wayland bar for Sway and Wlroots based compositors (GIT)'
 arch=('x86_64')
@@ -8,6 +8,7 @@ license=('MIT')
 provides=('waybar')
 conflicts=('waybar')
 depends=(
+    'python-packaging'
     'gtkmm3'
     'libjsoncpp.so'
     'libsigc++'
