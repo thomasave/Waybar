@@ -49,6 +49,8 @@ class Workspaces : public AModule, public EventHandler {
 
   bool windowRewriteConfigUsesTitle() const { return m_anyWindowRewriteRuleUsesTitle; }
 
+  auto getActiveMonitor() const -> std::string { return m_activeMonitorName; }
+
  private:
   void onEvent(const std::string& e) override;
   void updateWindowCount();
@@ -140,6 +142,7 @@ class Workspaces : public AModule, public EventHandler {
 
   bool m_withIcon;
   uint64_t m_monitorId;
+  std::string m_activeMonitorName;
   std::string m_activeWorkspaceName;
   std::string m_activeSpecialWorkspaceName;
   std::vector<std::unique_ptr<Workspace>> m_workspaces;

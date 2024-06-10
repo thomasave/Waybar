@@ -14,6 +14,7 @@
 #include <memory>
 #include <sstream>
 #include <utility>
+#include <ranges>
 
 #include "gdkmm/general.h"
 #include "glibmm/error.h"
@@ -25,6 +26,53 @@
 #include "util/string.hpp"
 
 namespace waybar::modules::wlr {
+
+// Personal Changes
+using namespace hyprland;
+
+std::vector<std::string> Taskbar::m_address_list;
+
+void Task::setAddress(std::string address) {
+  address_ = address;
+}
+std::string Task::getAddress() const {
+  return address_;
+}
+
+uint32_t Task::getId() const {
+  return id_;
+}
+
+void Task::setHidden(bool value) {
+  if (!hidden_ && value) {
+      tbar_->remove_button(button);
+  } else if (hidden_ && !value) {
+      tbar_->add_button(button);
+  }
+  hidden_ = value;
+}
+
+void Taskbar::onEvent(const std::string & ev) {
+  std::string eventName(std::begin(ev), std::begin(ev) + ev.find_first_of('>'));
+  std::string payload = ev.substr(eventName.size() + 2);
+  if (eventName == "openwindow") {
+    if (payload.find("Rofi") != std::string::npos) {
+      return;
+    }
+    std::lock_guard<std::mutex> lock(m_mutex);
+    std::string address = "0x" + payload.substr(0, payload.find_first_of(','));
+    m_address_list.emplace_back(address);
+    if (new_tasks_.empty()) {
+      m_new_addresses.push(address);
+    } else {
+      Task* t = new_tasks_.top();
+      t->setAddress(address);
+      new_tasks_.pop();
+    }
+  }
+  dp.emit();
+}
+
 
 /* Icon loading functions */
 static std::vector<std::string> search_prefix() {
@@ -788,6 +836,30 @@ Taskbar::Taskbar(const std::string &id, const waybar::Bar &bar, const Json::Valu
   }
 
   icon_themes_.push_back(Gtk::IconTheme::get_default());
+
+  modulesReady = true;
+
+  if (!gIPC) {
+    gIPC = std::make_unique<IPC>();
+  }
+  gIPC->registerForIPC("workspace", this);
+  gIPC->registerForIPC("focusedmon", this);
+  gIPC->registerForIPC("openwindow", this);
+  gIPC->registerForIPC("closewindow", this);
+  gIPC->registerForIPC("movewindow", this);
+
+  if (!m_address_list.empty()) {
+    for (auto & it : std::ranges::reverse_view(m_address_list)) {
+      m_new_addresses.push(it);
+    }
+  } else {
+    auto tasks = gIPC->getSocket1JsonReply("clients");
+    for (Json::Value &task: tasks) {
+      if (task["pid"].asInt() > -1) {
+        m_new_addresses.push(task["address"].asString());
+      }
+    }
+  }
 }
 
 Taskbar::~Taskbar() {
@@ -807,10 +879,35 @@ Taskbar::~Taskbar() {
       manager_ = nullptr;
     }
   }
+  gIPC->unregisterForIPC(this);
+  std::lock_guard<std::mutex> lg(m_mutex);
 }
 
 void Taskbar::update() {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  auto monitors = gIPC->getSocket1JsonReply("monitors");
+  std::set<std::string> visible_workspaces;
+  std::set<std::string> visible_clients;
+  for (Json::Value &monitor : monitors) {
+    if (monitor["focused"].asBool()) {
+      auto ws = monitor["activeWorkspace"];
+      if (ws.isObject() && (ws["name"].isString())) {
+        visible_workspaces.insert(ws["name"].asString());
+      }
+    }
+  }
+  auto tasks = gIPC->getSocket1JsonReply("clients");
+  for (Json::Value &task: tasks) {
+    if (task["pid"].asInt() > -1) {
+      auto ws = task["workspace"]["id"].asString();
+      if (visible_workspaces.contains(ws)) {
+        visible_clients.insert(task["address"].asString());
+      }
+    }
+  }
   for (auto &t : tasks_) {
+    spdlog::warn("Taskbar::update: task address: {} {}", t->getAddress(), visible_clients.contains(t->getAddress()));
+    // t->setHidden(!visible_clients.contains(t->getAddress()));
     t->update();
   }
 
@@ -877,7 +974,14 @@ void Taskbar::register_seat(struct wl_registry *registry, uint32_t name, uint32_
 }
 
 void Taskbar::handle_toplevel_create(struct zwlr_foreign_toplevel_handle_v1 *tl_handle) {
-  tasks_.push_back(std::make_unique<Task>(bar_, config_, this, tl_handle, seat_));
+  TaskPtr newTask = std::make_unique<Task>(bar_, config_, this, tl_handle, seat_);
+  if (!m_new_addresses.empty()) {
+    newTask->setAddress(m_new_addresses.top());
+    m_new_addresses.pop();
+  } else {
+    new_tasks_.push(newTask.get());
+  }
+  tasks_.push_back(std::move(newTask));
 }
 
 void Taskbar::handle_finished() {
@@ -906,6 +1010,13 @@ void Taskbar::remove_task(uint32_t id) {
   if (it == std::end(tasks_)) {
     spdlog::warn("Can't find task with id {}", id);
     return;
+  }
+
+  auto addressIt = std::find(m_address_list.begin(), m_address_list.end(), (*it)->getAddress());
+  if (addressIt != m_address_list.end()) {
+    m_address_list.erase(addressIt);
+  } else {
+    spdlog::warn("Can't find address {} in m_address_list", (*it)->getAddress());
   }
 
   tasks_.erase(it);

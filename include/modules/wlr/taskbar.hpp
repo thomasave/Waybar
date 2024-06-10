@@ -9,6 +9,8 @@
 #include <gtkmm/label.h>
 #include <wayland-client.h>
 
+#include <queue>
+#include <set>
 #include <map>
 #include <memory>
 #include <string>
@@ -21,6 +23,7 @@
 #include "giomm/desktopappinfo.h"
 #include "util/json.hpp"
 #include "wlr-foreign-toplevel-management-unstable-v1-client-protocol.h"
+#include "modules/hyprland/backend.hpp"
 
 namespace waybar::modules::wlr {
 
@@ -43,6 +46,13 @@ class Task {
   // made public so TaskBar can reorder based on configuration.
   Gtk::Button button;
 
+  uint32_t getId() const;
+  void setAddress(std::string address);
+  std::string getAddress() const;
+  void setHidden(bool value);
+
+
+
  private:
   static uint32_t global_id;
 
@@ -62,6 +72,7 @@ class Task {
   Glib::RefPtr<Gio::DesktopAppInfo> app_info_;
   bool button_visible_ = false;
   bool ignored_ = false;
+  bool hidden_ = false;
 
   bool with_icon_ = false;
   bool with_name_ = false;
@@ -73,6 +84,7 @@ class Task {
   std::string name_;
   std::string title_;
   std::string app_id_;
+  std::string address_;
   uint32_t state_ = 0;
 
   int32_t drag_start_x;
@@ -135,7 +147,7 @@ class Task {
 
 using TaskPtr = std::unique_ptr<Task>;
 
-class Taskbar : public waybar::AModule {
+class Taskbar : public waybar::AModule, public hyprland::EventHandler {
  public:
   Taskbar(const std::string &, const waybar::Bar &, const Json::Value &);
   ~Taskbar();
@@ -145,6 +157,13 @@ class Taskbar : public waybar::AModule {
   const waybar::Bar &bar_;
   Gtk::Box box_;
   std::vector<TaskPtr> tasks_;
+
+  // Personal changes
+  std::mutex m_mutex;
+  std::stack<Task*> new_tasks_;
+  std::stack<std::string> m_new_addresses;
+  static std::vector<std::string> m_address_list;
+  void onEvent(const std::string& e) override;
 
   std::vector<Glib::RefPtr<Gtk::IconTheme>> icon_themes_;
   std::unordered_set<std::string> ignore_list_;

@@ -172,11 +172,11 @@ std::string &Workspace::selectIcon(std::map<std::string, std::string> &icons_map
 
 void Workspace::update(const std::string &format, const std::string &icon) {
   // clang-format off
-  if (this->m_workspaceManager.activeOnly() && \
+  if ((this->m_workspaceManager.activeOnly() && \
      !this->isActive() && \
      !this->isPersistent() && \
      !this->isVisible() && \
-     !this->isSpecial()) {
+     !this->isSpecial()) || m_workspaceManager.getActiveMonitor() != m_output) {
     // clang-format on
     // if activeOnly is true, hide if not active, persistent, visible or special
     m_button.hide();
@@ -210,8 +210,12 @@ void Workspace::update(const std::string &format, const std::string &icon) {
     windows.append(window_repr);
   }
 
+  std::string workspaceName = name();
+  if (workspaceName.size() > 1) {
+    workspaceName = workspaceName[1];
+  }
   m_label.set_markup(fmt::format(fmt::runtime(format), fmt::arg("id", id()),
-                                 fmt::arg("name", name()), fmt::arg("icon", icon),
+                                 fmt::arg("name", workspaceName), fmt::arg("icon", icon),
                                  fmt::arg("windows", windows)));
 }
 
