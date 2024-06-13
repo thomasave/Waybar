@@ -405,12 +405,17 @@ void Workspaces::onWorkspaceMoved(std::string const &payload) {
   std::string workspaceName = payload.substr(0, payload.find(','));
   std::string monitorName = payload.substr(payload.find(',') + 1);
 
-  if (m_bar.output->name == monitorName) {
-    Json::Value clientsData = gIPC->getSocket1JsonReply("clients");
-    onWorkspaceCreated(workspaceName, clientsData);
-  } else {
-    spdlog::debug("Removing workspace because it was moved to another monitor: {}");
-    onWorkspaceDestroyed(workspaceName);
+  bool shouldShow = showSpecial() || !workspaceName.starts_with("special");
+  if (shouldShow && m_bar.output->name == monitorName) {  // TODO: implement this better
+    const Json::Value workspacesJson = gIPC->getSocket1JsonReply("workspaces");
+    for (Json::Value workspaceJson : workspacesJson) {
+      std::string name = workspaceJson["name"].asString();
+      if (name == workspaceName && m_bar.output->name == workspaceJson["monitor"].asString()) {
+        Json::Value clientsData = gIPC->getSocket1JsonReply("clients");
+        onWorkspaceCreated(workspaceName, clientsData);
+        break;
+      }
+    }
   }
 }
 
@@ -434,6 +439,7 @@ void Workspaces::onWorkspaceRenamed(std::string const &payload) {
 void Workspaces::onMonitorFocused(std::string const &payload) {
   spdlog::trace("Monitor focused: {}", payload);
   m_activeWorkspaceName = payload.substr(payload.find(',') + 1);
+  m_activeMonitorName = payload.substr(0, payload.find(','));
 
   for (Json::Value &monitor : gIPC->getSocket1JsonReply("monitors")) {
     if (monitor["name"].asString() == payload.substr(0, payload.find(','))) {
@@ -731,6 +737,7 @@ void Workspaces::setCurrentMonitorId() {
   } else {
     m_monitorId = (*currentMonitor)["id"].asInt();
     spdlog::trace("Current monitor ID: {}", m_monitorId);
+    m_activeMonitorName = (*currentMonitor)["name"].asString();
   }
 }
 
